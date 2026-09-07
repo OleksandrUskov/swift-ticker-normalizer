@@ -9,9 +9,9 @@ import Foundation
 ///
 /// Pipeline:
 /// 1. strip a leading Bitfinex `t` (only when an uppercase symbol follows, so `test` stays `TEST`)
-/// 2. remove separators `/ - _ :`
-/// 3. uppercase
-/// 4. strip a leading Kraken futures prefix (`PF` `PI` `FI` `FF`)
+/// 2. uppercase
+/// 3. strip a leading Kraken futures prefix **with its underscore** (`PF_` `PI_` `FI_` `FF_`)
+/// 4. remove separators `/ - _ :`
 /// 5. strip a trailing quote/contract suffix (longest-first, so `BTCUSDT` → `BTC`, never `BTCUS`)
 /// 6. remap legacy base-currency aliases (`XBT` → `BTC`)
 public enum TickerNormalizer {
@@ -50,21 +50,39 @@ public enum TickerNormalizer {
             }
         }
 
-        // Steps 2–3 — remove separators and uppercase.
-        var result = cleaned
-            .replacingOccurrences(of: "/", with: "")
-            .replacingOccurrences(of: "-", with: "")
-            .replacingOccurrences(of: "_", with: "")
-            .replacingOccurrences(of: ":", with: "")
-            .uppercased()
+        // Step 2 — uppercase.
+        var result = cleaned.uppercased()
 
-        // Step 4 — strip a Kraken futures prefix (PF_XBTUSD → XBTUSD → … → BTC).
-        for prefix in ["PF", "PI", "FI", "FF"] {
+        // Step 3 — strip a Kraken futures prefix WITH ITS UNDERSCORE, and BEFORE the separators go.
+        //
+        // The underscore is the only thing that tells a venue prefix apart from the first two
+        // letters of a coin's own name. This loop used to run AFTER separator removal, so by the
+        // time it saw the string the `_` was already gone and the match had degraded to a bare
+        // two-letter prefix. Measured on the released package:
+        //
+        //   FIL → L · PIXELUSDT → XEL · FIDAUSDT → DA · PIVXUSDT → VX · FISUSDT → S · FITFIUSDT → TFI
+        //
+        // Those are all real assets. Wherever this normalizer's output is used as a price-lookup or
+        // dedup key, a Filecoin position ends up filed under `L` and priced through `LUSDT`, which
+        // no venue serves — so it renders with no price at all.
+        //
+        // Order matters twice over: this must run AFTER the lowercase-`t` strip, which needs the
+        // original case to spot the Bitfinex boundary, and BEFORE separator removal, which is what
+        // destroys the disambiguator. It also stays ahead of suffix removal, so
+        // `PF_XBTUSD` → `XBTUSD` → `XBT` → `BTC`.
+        for prefix in ["PF_", "PI_", "FI_", "FF_"] {
             if result.hasPrefix(prefix), result.count > prefix.count {
                 result = String(result.dropFirst(prefix.count))
                 break
             }
         }
+
+        // Step 4 — remove separators.
+        result = result
+            .replacingOccurrences(of: "/", with: "")
+            .replacingOccurrences(of: "-", with: "")
+            .replacingOccurrences(of: "_", with: "")
+            .replacingOccurrences(of: ":", with: "")
 
         // Step 5 — strip a trailing quote/contract suffix (longest-first).
         for suffix in suffixes {

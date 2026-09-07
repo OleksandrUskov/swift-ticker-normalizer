@@ -32,7 +32,10 @@ TickerNormalizer.sanitize("USDT")           // "USDT" (a bare suffix is not coll
 
 1. Strip a leading Bitfinex `t` — but only when an uppercase symbol follows, so `test` stays `TEST`.
 2. Remove separators `/ - _ :`, then uppercase.
-3. Strip a leading Kraken futures prefix (`PF` `PI` `FI` `FF`).
+3. Strip a leading Kraken futures prefix **with its underscore** (`PF_` `PI_` `FI_` `FF_`),
+   before the separators are removed. The underscore is the only thing that tells a venue
+   prefix apart from the first two letters of a coin's name — without it `FIL` normalizes to
+   `L` and `PIXELUSDT` to `XEL`.
 4. Strip a trailing quote/contract suffix — **longest-first**, so `BTCUSDT` → `BTC`, never `BTCUS`.
 5. Remap legacy base-currency aliases (`XBT` → `BTC`).
 
