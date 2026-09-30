@@ -55,7 +55,7 @@ break in naive implementations. They're all covered by tests.
 swift test
 ```
 
-22 tests (Swift Testing), including a cross-exchange consistency check that every BTC-perp format
+32 tests (Swift Testing), including a cross-exchange consistency check that every BTC-perp format
 normalizes to `BTC`.
 
 ## Background
